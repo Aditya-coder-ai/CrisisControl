@@ -42,6 +42,12 @@ func (h *UIHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// AI-powered danger priority classification
 	mux.HandleFunc("POST /api/v1/ai/classify", h.ClassifyDanger)
+
+	// Health check for Railway / production monitoring
+	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok","service":"CrisisControl API"}`))
+	})
 }
 
 func (h *UIHandler) CreateIncident(w http.ResponseWriter, r *http.Request) {

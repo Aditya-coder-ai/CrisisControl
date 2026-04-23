@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"emergency-response/internal/api"
 	"emergency-response/internal/service"
@@ -28,7 +29,12 @@ func main() {
 	
 	server := api.NewServer(memoryStore, syncService, hub)
 	
-	addr := ":8085"
+	// Use PORT env var (Railway sets this), fallback to 8085 for local dev
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8085"
+	}
+	addr := ":" + port
 	log.Printf("Modules wired successfully. Starting server on %s", addr)
 	
 	if err := server.Start(addr); err != nil {
