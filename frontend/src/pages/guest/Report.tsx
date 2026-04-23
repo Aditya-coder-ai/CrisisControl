@@ -325,12 +325,12 @@ export default function GuestReport() {
       <div className="p-4 md:p-5 bg-white/90 dark:bg-[#0a0505]/90 backdrop-blur-xl border-t-2 border-red-200 dark:border-red-500/20 sticky bottom-0 z-10">
         <div className="max-w-2xl mx-auto flex gap-3">
           <a
-            href="tel:911"
+            href="tel:112"
             className="shrink-0 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl border-2 border-red-500 text-red-500 font-black hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors uppercase tracking-wider"
-            id="call-911-btn"
+            id="call-112-btn"
           >
             <Phone className="w-5 h-5" />
-            <span className="hidden sm:inline">911</span>
+            <span className="hidden sm:inline">112</span>
           </a>
           <Button
             onClick={handleReport}
