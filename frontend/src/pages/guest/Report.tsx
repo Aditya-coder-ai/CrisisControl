@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MapPin, AlertCircle, Phone, Send, Loader2, Camera, FileText, CheckCircle2, Siren } from 'lucide-react';
+import { Mic, MapPin, AlertCircle, Phone, Send, Loader2, Camera, FileText, CheckCircle2, Siren, Shield, Brain, Zap, Clock } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import GuestLayout from '@/components/layout/GuestLayout';
 import { Button } from '@/components/ui/Button';
 import api from '@/lib/api';
+import type { AIClassification } from '@/lib/api';
 import { useWebSocket } from '@/lib/useWebSocket';
 
 // Fix default marker icon
@@ -83,21 +84,39 @@ export default function GuestReport() {
   const [incidentId, setIncidentId] = useState('');
   const [liveStatus, setLiveStatus] = useState('reported');
   const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [aiResult, setAiResult] = useState<AIClassification | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const { lastMessage, isConnected } = useWebSocket(['incident_updated']);
+
+  // Debounced AI classification when text changes
+  useEffect(() => {
+    if (!textReport || textReport.trim().length < 5) {
+      setAiResult(null);
+      return;
+    }
+    setAiLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api.ai.classify(textReport);
+        setAiResult(result);
+      } catch { setAiResult(null); }
+      finally { setAiLoading(false); }
+    }, 600);
+    return () => { clearTimeout(timer); setAiLoading(false); };
+  }, [textReport]);
 
   const handleReport = async () => {
     setSubmitting(true);
     try {
-      // Determine pseudo type/severity based on input for demo purposes
-      let type = 'Medical';
-      if (textReport.toLowerCase().includes('fire')) type = 'Fire';
-      if (textReport.toLowerCase().includes('fight') || textReport.toLowerCase().includes('gun')) type = 'Security';
+      // Use AI classification result if available, otherwise fallback
+      const incidentType = aiResult?.type || 'Medical';
+      const incidentSeverity = aiResult?.severity || 'high';
       
       const res = await api.incidents.create({
-        type: type,
+        type: incidentType,
         title: 'Guest Report',
         description: textReport || 'Voice/Photo evidence submitted.',
-        severity: 'high',
+        severity: incidentSeverity,
         location: {
           latitude: selectedCoords?.lat || 20.5937,
           longitude: selectedCoords?.lng || 78.9629,
@@ -285,6 +304,134 @@ export default function GuestReport() {
                 <Camera className="w-12 h-12 text-orange-400/50 mx-auto mb-3" />
                 <p className="text-orange-500/70 font-bold uppercase tracking-wider text-sm">Tap to capture or upload</p>
                 <p className="text-orange-400/30 text-xs mt-1 font-mono">JPG, PNG — MAX 10MB</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* AI Danger Priority Card */}
+        <AnimatePresence>
+          {(aiResult || aiLoading) && activeInput === 'text' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+              className="w-full"
+              id="ai-classification-card"
+            >
+              <div className={`relative overflow-hidden rounded-2xl border-2 p-5 transition-all duration-500 ${
+                aiLoading
+                  ? 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900/50'
+                  : aiResult?.priority === 'CRITICAL'
+                    ? 'border-red-500 bg-red-50 dark:bg-red-950/30 shadow-[0_0_30px_rgba(239,68,68,0.15)]'
+                    : aiResult?.priority === 'HIGH'
+                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30 shadow-[0_0_25px_rgba(249,115,22,0.12)]'
+                      : aiResult?.priority === 'MODERATE'
+                        ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+                        : 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30'
+              }`}>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-700 dark:text-white">
+                    <Brain className="w-4 h-4 text-violet-500" />
+                    AI Threat Analysis
+                  </h3>
+                  {aiLoading ? (
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Analyzing...
+                    </span>
+                  ) : aiResult && (
+                    <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500">
+                      {Math.round(aiResult.confidence * 100)}% confidence
+                    </span>
+                  )}
+                </div>
+
+                {aiLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="w-10 h-10 border-4 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+                  </div>
+                ) : aiResult && (
+                  <>
+                    {/* Priority + Danger Score */}
+                    <div className="flex items-center gap-4 mb-4">
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', damping: 10, delay: 0.1 }}
+                        className={`shrink-0 w-16 h-16 rounded-2xl flex flex-col items-center justify-center font-black ${
+                          aiResult.priority === 'CRITICAL' ? 'bg-red-500 text-white animate-pulse'
+                            : aiResult.priority === 'HIGH' ? 'bg-orange-500 text-white'
+                              : aiResult.priority === 'MODERATE' ? 'bg-amber-500 text-white'
+                                : 'bg-emerald-500 text-white'
+                        }`}
+                      >
+                        <Shield className="w-5 h-5 mb-0.5" />
+                        <span className="text-[10px] tracking-widest">{aiResult.priority}</span>
+                      </motion.div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Zap className={`w-4 h-4 ${
+                            aiResult.priority === 'CRITICAL' ? 'text-red-500' : aiResult.priority === 'HIGH' ? 'text-orange-500' : aiResult.priority === 'MODERATE' ? 'text-amber-500' : 'text-emerald-500'
+                          }`} />
+                          <span className="text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">
+                            {aiResult.type} Emergency
+                          </span>
+                        </div>
+                        {/* Danger bar */}
+                        <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${aiResult.danger_score * 100}%` }}
+                            transition={{ duration: 0.8, ease: 'easeOut' }}
+                            className={`h-full rounded-full ${
+                              aiResult.danger_score >= 0.8 ? 'bg-gradient-to-r from-red-500 to-red-600'
+                                : aiResult.danger_score >= 0.6 ? 'bg-gradient-to-r from-orange-400 to-orange-500'
+                                  : aiResult.danger_score >= 0.35 ? 'bg-gradient-to-r from-amber-400 to-amber-500'
+                                    : 'bg-gradient-to-r from-emerald-400 to-emerald-500'
+                            }`}
+                          />
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-[10px] font-mono font-bold text-slate-400">Danger: {Math.round(aiResult.danger_score * 100)}%</span>
+                          <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-slate-400">
+                            <Clock className="w-3 h-3" /> ETA: {aiResult.response_time}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Risk Factors */}
+                    {aiResult.risk_factors.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {aiResult.risk_factors.map((f, i) => (
+                          <span key={i} className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+                            aiResult.priority === 'CRITICAL' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                              : aiResult.priority === 'HIGH' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300'
+                                : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            ⚠ {f}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Matched Keywords */}
+                    {aiResult.threat_keywords.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {aiResult.threat_keywords.slice(0, 8).map((kw, i) => (
+                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono">
+                            {kw}
+                          </span>
+                        ))}
+                        {aiResult.threat_keywords.length > 8 && (
+                          <span className="text-[10px] px-2 py-0.5 text-slate-400 font-mono">+{aiResult.threat_keywords.length - 8} more</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </motion.div>
           )}

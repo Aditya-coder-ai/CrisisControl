@@ -148,4 +148,21 @@ export const sync = {
     request<SyncPayload>(`/sync/pull?since=${encodeURIComponent(since)}`),
 };
 
-export default { incidents, auth, sync, ApiError };
+// ─── AI Classification Endpoints ────────────────────────────
+export interface AIClassification {
+  danger_score: number;
+  severity: 'critical' | 'high' | 'moderate' | 'low';
+  type: string;
+  confidence: number;
+  threat_keywords: string[];
+  risk_factors: string[];
+  priority: string;
+  response_time: string;
+}
+
+export const ai = {
+  classify: (description: string) =>
+    request<AIClassification>('/ai/classify', { method: 'POST', body: { description } }),
+};
+
+export default { incidents, auth, sync, ai, ApiError };

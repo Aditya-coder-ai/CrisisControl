@@ -10,16 +10,18 @@ import (
 )
 
 type UIHandler struct {
-	store       store.Store
-	syncService *service.SyncService
-	hub         *service.Hub
+	store        store.Store
+	syncService  *service.SyncService
+	hub          *service.Hub
+	aiClassifier *service.AIClassifier
 }
 
 func NewUIHandler(s store.Store, syncSvc *service.SyncService, hub *service.Hub) *UIHandler {
 	return &UIHandler{
-		store:       s,
-		syncService: syncSvc,
-		hub:         hub,
+		store:        s,
+		syncService:  syncSvc,
+		hub:          hub,
+		aiClassifier: service.NewAIClassifier(),
 	}
 }
 
@@ -37,6 +39,9 @@ func (h *UIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
 		service.ServeWs(h.hub, w, r)
 	})
+
+	// AI-powered danger priority classification
+	mux.HandleFunc("POST /api/v1/ai/classify", h.ClassifyDanger)
 }
 
 func (h *UIHandler) CreateIncident(w http.ResponseWriter, r *http.Request) {
@@ -149,4 +154,25 @@ func (h *UIHandler) SyncOfflineData(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "sync_successful"}`))
+}
+
+// ClassifyDanger uses the AI classifier to assess danger priority from a text description.
+func (h *UIHandler) ClassifyDanger(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	if payload.Description == "" {
+		http.Error(w, `{"error": "description is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	classification := h.aiClassifier.Classify(payload.Description)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(classification)
 }
