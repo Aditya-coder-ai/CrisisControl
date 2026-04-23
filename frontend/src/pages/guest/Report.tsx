@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import GuestLayout from '@/components/layout/GuestLayout';
 import { Button } from '@/components/ui/Button';
 import api from '@/lib/api';
-import type { AIClassification } from '@/lib/api';
+import { classifyDanger, type AIClassification } from '@/lib/aiClassifier';
 import { useWebSocket } from '@/lib/useWebSocket';
 
 // Fix default marker icon
@@ -88,20 +88,18 @@ export default function GuestReport() {
   const [aiLoading, setAiLoading] = useState(false);
   const { lastMessage, isConnected } = useWebSocket(['incident_updated']);
 
-  // Debounced AI classification when text changes
+  // Debounced AI classification — runs client-side, no backend needed
   useEffect(() => {
     if (!textReport || textReport.trim().length < 5) {
       setAiResult(null);
       return;
     }
     setAiLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const result = await api.ai.classify(textReport);
-        setAiResult(result);
-      } catch { setAiResult(null); }
-      finally { setAiLoading(false); }
-    }, 600);
+    const timer = setTimeout(() => {
+      const result = classifyDanger(textReport);
+      setAiResult(result);
+      setAiLoading(false);
+    }, 400);
     return () => { clearTimeout(timer); setAiLoading(false); };
   }, [textReport]);
 
