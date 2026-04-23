@@ -15,6 +15,7 @@ import GuestReport from './pages/guest/Report';
 import StaffDashboard from './pages/staff/Dashboard';
 import ResponderMap from './pages/responder/Map';
 import LoginPage from './pages/auth/Login';
+import SignupPage from './pages/auth/Signup';
 
 const tierCards = [
   {
@@ -178,6 +179,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/guest" element={<GuestReport />} />
         <Route path="/staff" element={<StaffDashboard />} />
         <Route path="/responder" element={<ResponderMap />} />

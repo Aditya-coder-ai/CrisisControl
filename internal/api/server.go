@@ -48,6 +48,10 @@ func (s *Server) SetupRoutes() http.Handler {
 	uiHandler := handlers.NewUIHandler(s.store, s.syncService, s.hub)
 	uiHandler.RegisterRoutes(s.mux)
 
+	// Register auth endpoints (signup, login, me)
+	authHandler := handlers.NewAuthHandler(s.store)
+	authHandler.RegisterRoutes(s.mux)
+
 	// Default: apply mock authentication for testing purposes
 	mockUser := &models.User{
 		ID:       "mock-admin-id",

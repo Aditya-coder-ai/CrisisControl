@@ -119,9 +119,14 @@ export interface LoginResponse {
 export const auth = {
   login: (credentials: { email: string; password: string }) =>
     request<LoginResponse>('/auth/login', { method: 'POST', body: credentials }),
+  signup: (data: { name: string; email: string; password: string; role: string }) =>
+    request<LoginResponse>('/auth/signup', { method: 'POST', body: data }),
+  me: () =>
+    request<{ id: string; name: string; role: string }>('/auth/me'),
   logout: () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('user_name');
   },
 };
 
