@@ -1,10 +1,78 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MapPin, AlertCircle, Phone, Send, Loader2, Camera, FileText, CheckCircle2, Siren } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import GuestLayout from '@/components/layout/GuestLayout';
 import { Button } from '@/components/ui/Button';
 import api from '@/lib/api';
 import { useWebSocket } from '@/lib/useWebSocket';
+
+// Fix default marker icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+// Native Leaflet map component for location picking
+function LeafletLocationPicker({ onSelect, selectedCoords }: {
+  onSelect: (coords: { lat: number; lng: number }) => void;
+  selectedCoords: { lat: number; lng: number } | null;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      center: [20.5937, 78.9629],
+      zoom: 5,
+      zoomControl: false,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const { lat, lng } = e.latlng;
+      onSelect({ lat, lng });
+
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else {
+        markerRef.current = L.marker([lat, lng]).addTo(map);
+      }
+    });
+
+    mapRef.current = map;
+
+    // Fix tile rendering after container becomes visible
+    setTimeout(() => map.invalidateSize(), 200);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+  }, []);
+
+  // Update marker if coords change externally
+  useEffect(() => {
+    if (!mapRef.current || !selectedCoords) return;
+    if (markerRef.current) {
+      markerRef.current.setLatLng([selectedCoords.lat, selectedCoords.lng]);
+    } else {
+      markerRef.current = L.marker([selectedCoords.lat, selectedCoords.lng]).addTo(mapRef.current);
+    }
+  }, [selectedCoords]);
+
+  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />;
+}
 
 export default function GuestReport() {
   const [isRecording, setIsRecording] = useState(false);
@@ -14,6 +82,7 @@ export default function GuestReport() {
   const [textReport, setTextReport] = useState('');
   const [incidentId, setIncidentId] = useState('');
   const [liveStatus, setLiveStatus] = useState('reported');
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const { lastMessage, isConnected } = useWebSocket(['incident_updated']);
 
   const handleReport = async () => {
@@ -30,9 +99,9 @@ export default function GuestReport() {
         description: textReport || 'Voice/Photo evidence submitted.',
         severity: 'high',
         location: {
-          latitude: 40.7128,
-          longitude: -74.0060,
-          address: 'Sector 4',
+          latitude: selectedCoords?.lat || 20.5937,
+          longitude: selectedCoords?.lng || 78.9629,
+          address: selectedCoords ? `${selectedCoords.lat.toFixed(4)}°N, ${selectedCoords.lng.toFixed(4)}°E` : 'Location not set',
         },
         status: 'reported'
       });
@@ -230,17 +299,24 @@ export default function GuestReport() {
         >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2 uppercase tracking-wider text-sm">
-              <MapPin className="w-5 h-5 text-red-500" /> Location Detected
+              <MapPin className="w-5 h-5 text-red-500" />
+              {selectedCoords ? 'Location Selected' : 'Tap Map to Set Location'}
             </h3>
-            <span className="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] px-3 py-1 rounded-full font-bold font-mono tracking-widest uppercase">
-              ● GPS LOCK
+            <span className={`text-[10px] px-3 py-1 rounded-full font-bold font-mono tracking-widest uppercase ${
+              selectedCoords
+                ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                : 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+            }`}>
+              {selectedCoords ? '● GPS LOCK' : '○ AWAITING'}
             </span>
           </div>
-          <div className="h-36 bg-slate-100 dark:bg-red-950/30 rounded-xl relative overflow-hidden group">
-            <div className="absolute inset-0 bg-[url('https://maps.wikimedia.org/osm-intl/13/4093/2724.png')] bg-cover opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <MapPin className="w-8 h-8 text-red-600 drop-shadow-lg animate-bounce" />
-            </div>
+          {selectedCoords && (
+            <p className="text-xs text-red-400/50 font-mono mb-2 tracking-wide">
+              {selectedCoords.lat.toFixed(4)}°N, {selectedCoords.lng.toFixed(4)}°E
+            </p>
+          )}
+          <div className="h-48 rounded-xl overflow-hidden relative" style={{ zIndex: 0 }}>
+            <LeafletLocationPicker onSelect={setSelectedCoords} selectedCoords={selectedCoords} />
           </div>
         </motion.div>
       </div>

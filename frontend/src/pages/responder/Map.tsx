@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Navigation,
   Radio,
   Info,
   Layers,
@@ -10,47 +9,135 @@ import {
   ChevronLeft,
   X,
   Clock,
-  Users,
   MapPin,
   Flame,
   Activity,
   Siren,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useIncidents } from '@/lib/useIncidents';
 import IncidentDetail from '@/components/IncidentDetail';
+
+// Fix default marker icon
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
+
+function createSeverityIcon(severity: string) {
+  const color = severity === 'critical' ? '#dc2626' : severity === 'high' ? '#d97706' : '#ea580c';
+  return L.divIcon({
+    className: 'custom-severity-marker',
+    html: `<div style="
+      width: 36px; height: 36px; border-radius: 50%;
+      background: ${color}; border: 3px solid rgba(255,255,255,0.8);
+      box-shadow: 0 0 20px ${color}80, 0 0 40px ${color}40;
+      display: flex; align-items: center; justify-content: center;
+    "><div style="width:10px;height:10px;background:white;border-radius:50%;"></div></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -20],
+  });
+}
+
+const tileUrls: Record<string, string> = {
+  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  standard: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+};
 
 export default function ResponderMap() {
   const { incidents, isConnected } = useIncidents();
   const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
   const [showLayers, setShowLayers] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [mapStyle, setMapStyle] = useState<'dark' | 'satellite' | 'standard'>('dark');
 
-  // Helper map for icons
-  const getIcon = (type: string) => {
-    switch (type?.toLowerCase()) {
-      case 'fire': return Flame;
-      case 'medical': return Activity;
-      default: return AlertCircle;
-    }
-  };
+  const mapRef = useRef<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const markersRef = useRef<L.LayerGroup>(L.layerGroup());
 
   const activeIncident = incidents.find(i => i.id === activeIncidentId);
+  const activeIncidents = incidents.filter(inc => inc.status !== 'resolved' && inc.status !== 'closed');
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      center: [20.5937, 78.9629],
+      zoom: 5,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    tileLayerRef.current = L.tileLayer(tileUrls[mapStyle]).addTo(map);
+    markersRef.current.addTo(map);
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Update tile layer when style changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (tileLayerRef.current) {
+      tileLayerRef.current.remove();
+    }
+    tileLayerRef.current = L.tileLayer(tileUrls[mapStyle]).addTo(mapRef.current);
+  }, [mapStyle]);
+
+  // Update markers when incidents change
+  useEffect(() => {
+    if (!mapRef.current) return;
+    markersRef.current.clearLayers();
+
+    activeIncidents.forEach((inc) => {
+      const lat = inc.location?.latitude || 20.5937 + Math.random() * 10;
+      const lng = inc.location?.longitude || 73 + Math.random() * 10;
+
+      const marker = L.marker([lat, lng], { icon: createSeverityIcon(inc.severity) });
+      marker.bindPopup(`
+        <div style="font-family:system-ui;min-width:180px">
+          <strong style="font-size:14px;text-transform:uppercase">${inc.title}</strong><br/>
+          <span style="font-size:11px;color:#888">${inc.type} • ${inc.severity}</span><br/>
+          <span style="font-size:11px">${inc.location?.address || 'Unknown location'}</span>
+        </div>
+      `);
+      marker.on('click', () => {
+        setActiveIncidentId(prev => prev === inc.id ? null : inc.id);
+      });
+      markersRef.current.addLayer(marker);
+    });
+  }, [activeIncidents]);
+
+  // Fly to active incident
+  useEffect(() => {
+    if (!mapRef.current || !activeIncident?.location?.latitude) return;
+    mapRef.current.flyTo(
+      [activeIncident.location.latitude, activeIncident.location.longitude],
+      14,
+      { duration: 1.2 }
+    );
+  }, [activeIncidentId]);
 
   return (
-    <div className="h-screen w-full bg-[#0a0505] flex flex-col relative overflow-hidden emergency-vignette">
-      
-      {/* Map Background */}
-      <div className="absolute inset-0 z-0">
-        <div className="w-full h-full bg-[url('https://maps.wikimedia.org/osm-intl/13/4093/2724.png')] bg-cover bg-center opacity-20 mix-blend-luminosity" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(220,38,38,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(220,38,38,0.04)_1px,transparent_1px)] bg-[size:60px_60px]" />
-        {/* Red tint overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-red-950/20 via-transparent to-red-950/30" />
-      </div>
+    <div className="h-screen w-full bg-[#0a0505] flex flex-col relative overflow-hidden">
 
-      {/* Scan line */}
+      {/* Full-screen Leaflet Map */}
+      <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+
+      {/* Scan line overlay */}
       <div className="scan-line absolute inset-0 pointer-events-none z-50" />
 
       {/* Top HUD */}
@@ -102,50 +189,36 @@ export default function ResponderMap() {
           >
             <Layers className="w-5 h-5" />
           </button>
+
+          <AnimatePresence>
+            {showLayers && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-[#0a0505]/95 backdrop-blur-xl border border-red-500/20 rounded-xl p-2 flex flex-col gap-1"
+              >
+                {(['dark', 'satellite', 'standard'] as const).map((style) => (
+                  <button
+                    key={style}
+                    onClick={() => { setMapStyle(style); setShowLayers(false); }}
+                    className={`px-3 py-2 rounded-lg text-[10px] font-mono font-bold tracking-widest uppercase transition-all ${
+                      mapStyle === style
+                        ? 'bg-red-600 text-white'
+                        : 'text-red-400/40 hover:text-white hover:bg-red-500/10'
+                    }`}
+                  >
+                    {style}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <button className="bg-[#0a0505]/95 backdrop-blur-xl border border-red-500/15 p-3 rounded-xl text-red-400/40 hover:text-white hover:border-red-500/30 shadow-xl transition-all" id="crosshair-btn">
             <Crosshair className="w-5 h-5" />
           </button>
         </motion.div>
-      </div>
-
-      {/* Map Pins */}
-      <div className="absolute inset-0 z-[5]">
-        {incidents.filter(inc => inc.status !== 'resolved' && inc.status !== 'closed').map((pin, index) => {
-          const Icon = getIcon(pin.type);
-          // Scatter mock pins if lat/lon not dynamic enough
-          const top = pin.location?.latitude ? `${(pin.location.latitude % 40) * 10}%` : `${30 + (index * 15)}%`;
-          const left = pin.location?.longitude ? `${Math.abs(pin.location.longitude % 74) * 10}%` : `${20 + (index * 20)}%`;
-          
-          return (
-            <div
-              key={pin.id}
-              className="absolute cursor-pointer"
-              style={{ top, left }}
-              onClick={() => setActiveIncidentId(activeIncidentId === pin.id ? null : pin.id)}
-            >
-              <div className="relative group">
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center border-2 shadow-xl transition-transform group-hover:scale-110 ${
-                  pin.severity === 'critical'
-                    ? 'bg-red-600 border-red-400/50 shadow-[0_0_30px_rgba(220,38,38,0.6)] animate-urgency-pulse'
-                    : pin.severity === 'high'
-                    ? 'bg-amber-600 border-amber-400/50 shadow-[0_0_20px_rgba(245,158,11,0.5)]'
-                    : 'bg-orange-500 border-orange-400/50 shadow-[0_0_15px_rgba(249,115,22,0.4)]'
-                }`}>
-                  <Icon className="text-white w-6 h-6" />
-                </div>
-                {pin.severity === 'critical' && (
-                  <>
-                    <div className="absolute inset-0 border-4 border-red-500 rounded-full animate-ping opacity-20" />
-                    <div className="absolute -inset-2 border-2 border-red-500/30 rounded-full animate-ping opacity-10" style={{ animationDelay: '0.5s' }} />
-                  </>
-                )}
-                <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-[#0a0505]/90 text-red-400 text-[9px] font-mono font-bold px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity tracking-widest uppercase">
-                  {pin.id}
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* Bottom Incident Card */}
@@ -198,8 +271,8 @@ export default function ResponderMap() {
         </AnimatePresence>
       </div>
 
-       {/* Detail Slide Over */}
-       <AnimatePresence>
+      {/* Detail Slide Over */}
+      <AnimatePresence>
         {showDetail && activeIncidentId && (
           <IncidentDetail 
             incidentId={activeIncidentId} 
@@ -207,6 +280,17 @@ export default function ResponderMap() {
           />
         )}
       </AnimatePresence>
+
+      {/* Custom CSS */}
+      <style>{`
+        .custom-severity-marker {
+          background: transparent !important;
+          border: none !important;
+        }
+        .leaflet-container {
+          background: #0a0505 !important;
+        }
+      `}</style>
     </div>
   );
 }
