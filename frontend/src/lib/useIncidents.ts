@@ -22,11 +22,11 @@ export function useIncidents() {
     fetchIncidents();
   }, [fetchIncidents]);
 
-  // Process WebSocket events
+  // Process local event bus events (replaces WebSocket)
   useEffect(() => {
     if (!lastMessage) return;
 
-    if (lastMessage.topic === 'incident_created' || lastMessage.topic === 'incident_updated') {
+    if (lastMessage.topic === 'incident_created') {
       const newIncident = lastMessage.payload;
       setIncidents((current) => {
         const exists = current.find((i) => i.id === newIncident.id);
@@ -34,6 +34,15 @@ export function useIncidents() {
           return current.map((i) => (i.id === newIncident.id ? newIncident : i));
         }
         return [newIncident, ...current];
+      });
+    } else if (lastMessage.topic === 'incident_updated') {
+      const updatedIncident = lastMessage.payload;
+      setIncidents((current) => {
+        const exists = current.find((i) => i.id === updatedIncident.id);
+        if (exists) {
+          return current.map((i) => (i.id === updatedIncident.id ? updatedIncident : i));
+        }
+        return [updatedIncident, ...current];
       });
     }
   }, [lastMessage]);

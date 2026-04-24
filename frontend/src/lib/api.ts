@@ -1,68 +1,118 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8085/api/v1';
+/**
+ * Offline-first API layer — stores everything in localStorage.
+ * Works on GitHub Pages without any backend server.
+ * Provides the same interface as the original API module so all consumers
+ * (Report, Dashboard, IncidentDetail, etc.) work without changes.
+ */
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+import { eventBus } from './useWebSocket';
+import { classifyDanger } from './aiClassifier';
 
-interface ApiOptions {
-  method?: HttpMethod;
-  body?: unknown;
-  headers?: Record<string, string>;
-  signal?: AbortSignal;
-}
+// ─── Storage helpers ────────────────────────────────────────────
+const INCIDENTS_KEY = 'crisis_incidents';
+const UPDATES_KEY = 'crisis_updates';
+const USERS_KEY = 'crisis_users';
 
-class ApiError extends Error {
-  status: number;
-  data: unknown;
-
-  constructor(message: string, status: number, data: unknown) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.data = data;
+function readStore<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
   }
 }
 
-async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, signal } = options;
+function writeStore<T>(key: string, data: T): void {
+  localStorage.setItem(key, JSON.stringify(data));
+}
 
-  const config: RequestInit = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
+function generateId(): string {
+  return 'INC-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function generateUpdateId(): string {
+  return 'UPD-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+// Seed some demo incidents if the store is empty
+function seedDemoData() {
+  const existing = readStore<Incident[]>(INCIDENTS_KEY, []);
+  if (existing.length > 0) return;
+
+  const now = new Date().toISOString();
+  const demoIncidents: Incident[] = [
+    {
+      id: 'INC-DEMO01',
+      type: 'Fire',
+      title: 'Warehouse Fire — Sector 3',
+      description: 'Large warehouse fire reported with heavy smoke. Multiple floors involved. Adjacent buildings at risk.',
+      severity: 'critical',
+      status: 'dispatched',
+      location: { latitude: 19.076, longitude: 72.8777, address: '19.0760°N, 72.8777°E' },
+      assigned_team: 'Fire Unit Alpha',
+      external_agency: 'Fire Dept',
+      tags: ['fire', 'warehouse', 'multi-floor'],
+      created_at: new Date(Date.now() - 45 * 60000).toISOString(),
+      updated_at: now,
     },
-    signal,
-  };
+    {
+      id: 'INC-DEMO02',
+      type: 'Medical',
+      title: 'Multi-Vehicle Collision',
+      description: 'Major accident on highway involving 4 vehicles. At least 3 people injured, one unconscious.',
+      severity: 'high',
+      status: 'in_progress',
+      location: { latitude: 28.6139, longitude: 77.209, address: '28.6139°N, 77.2090°E' },
+      assigned_team: 'Medic-7',
+      external_agency: 'Ambulance',
+      tags: ['accident', 'highway', 'multiple-casualties'],
+      created_at: new Date(Date.now() - 20 * 60000).toISOString(),
+      updated_at: now,
+    },
+    {
+      id: 'INC-DEMO03',
+      type: 'Security',
+      title: 'Suspicious Package — Mall',
+      description: 'Unattended package found near main entrance of shopping mall. Area being evacuated.',
+      severity: 'moderate',
+      status: 'reported',
+      location: { latitude: 12.9716, longitude: 77.5946, address: '12.9716°N, 77.5946°E' },
+      assigned_team: 'Pending',
+      external_agency: 'Police',
+      tags: ['suspicious', 'evacuation'],
+      created_at: new Date(Date.now() - 10 * 60000).toISOString(),
+      updated_at: now,
+    },
+  ];
 
-  if (body) {
-    config.body = JSON.stringify(body);
-  }
+  writeStore(INCIDENTS_KEY, demoIncidents);
 
-  // Retrieve stored token for RBAC
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, config);
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new ApiError(
-      `API Error: ${res.statusText}`,
-      res.status,
-      errorData
-    );
-  }
-
-  // Handle 204 No Content
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return res.json();
+  // Seed some demo updates for the first incident
+  const demoUpdates: IncidentUpdate[] = [
+    {
+      id: 'UPD-SEED01',
+      incident_id: 'INC-DEMO01',
+      message: 'First responders on scene. Fire contained to east wing.',
+      author: 'Dispatch',
+      status: 'dispatched',
+      created_at: new Date(Date.now() - 30 * 60000).toISOString(),
+    },
+    {
+      id: 'UPD-SEED02',
+      incident_id: 'INC-DEMO01',
+      message: 'Additional fire units requested. Smoke visible from 2km.',
+      author: 'Unit Alpha',
+      status: 'in_progress',
+      created_at: new Date(Date.now() - 15 * 60000).toISOString(),
+    },
+  ];
+  writeStore(UPDATES_KEY, demoUpdates);
 }
 
-// ─── Incident Endpoints ─────────────────────────────────────
+// Seed on module load
+seedDemoData();
+
+// ─── Types ──────────────────────────────────────────────────────
 export interface Incident {
   id: string;
   type: string;
@@ -89,24 +139,115 @@ export interface IncidentUpdate {
   incident_id: string;
   message: string;
   author: string;
+  status?: string;
   created_at: string;
 }
 
+// ─── Incident API (localStorage) ────────────────────────────────
 export const incidents = {
-  list: (params?: { status?: string; severity?: string }) => {
-    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
-    return request<Incident[]>(`/incidents${qs}`);
+  list: async (_params?: { status?: string; severity?: string }): Promise<Incident[]> => {
+    const all = readStore<Incident[]>(INCIDENTS_KEY, []);
+    // Sort by created_at descending (newest first)
+    return all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   },
-  get: (id: string) => request<Incident>(`/incidents/${id}`),
-  create: (data: Partial<Incident>) => request<Incident>('/incidents', { method: 'POST', body: data }),
-  update: (id: string, data: Partial<Incident>) => request<Incident>(`/incidents/${id}`, { method: 'PATCH', body: data }),
-  delete: (id: string) => request<void>(`/incidents/${id}`, { method: 'DELETE' }),
-  getUpdates: (id: string) => request<IncidentUpdate[]>(`/incidents/${id}/updates`),
-  addUpdate: (id: string, payload: { status: string; note: string; is_internal: boolean; }) =>
-    request<IncidentUpdate>(`/incidents/${id}/updates`, { method: 'POST', body: payload }),
+
+  get: async (id: string): Promise<Incident> => {
+    const all = readStore<Incident[]>(INCIDENTS_KEY, []);
+    const found = all.find(i => i.id === id);
+    if (!found) throw new Error('Incident not found');
+    return found;
+  },
+
+  create: async (data: Partial<Incident>): Promise<Incident> => {
+    const all = readStore<Incident[]>(INCIDENTS_KEY, []);
+    const now = new Date().toISOString();
+    const newIncident: Incident = {
+      id: generateId(),
+      type: data.type || 'General',
+      title: data.title || 'Emergency Report',
+      description: data.description || '',
+      severity: data.severity || 'high',
+      status: data.status || 'reported',
+      location: data.location || { latitude: 20.5937, longitude: 78.9629 },
+      assigned_team: data.assigned_team,
+      external_agency: data.external_agency,
+      tags: data.tags,
+      created_at: now,
+      updated_at: now,
+    };
+    all.unshift(newIncident);
+    writeStore(INCIDENTS_KEY, all);
+
+    // Emit event so other components (Dashboard, Map) update in real time
+    eventBus.emit('incident_created', newIncident);
+
+    // Simulate dispatch after a short delay
+    setTimeout(() => {
+      const current = readStore<Incident[]>(INCIDENTS_KEY, []);
+      const idx = current.findIndex(i => i.id === newIncident.id);
+      if (idx !== -1 && current[idx].status === 'reported') {
+        current[idx].status = 'dispatched';
+        current[idx].assigned_team = current[idx].assigned_team || 'Response Unit-' + Math.ceil(Math.random() * 12);
+        current[idx].updated_at = new Date().toISOString();
+        writeStore(INCIDENTS_KEY, current);
+        eventBus.emit('incident_updated', current[idx]);
+      }
+    }, 5000);
+
+    return newIncident;
+  },
+
+  update: async (id: string, data: Partial<Incident>): Promise<Incident> => {
+    const all = readStore<Incident[]>(INCIDENTS_KEY, []);
+    const idx = all.findIndex(i => i.id === id);
+    if (idx === -1) throw new Error('Incident not found');
+    all[idx] = { ...all[idx], ...data, updated_at: new Date().toISOString() };
+    writeStore(INCIDENTS_KEY, all);
+    eventBus.emit('incident_updated', all[idx]);
+    return all[idx];
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const all = readStore<Incident[]>(INCIDENTS_KEY, []);
+    writeStore(INCIDENTS_KEY, all.filter(i => i.id !== id));
+  },
+
+  getUpdates: async (id: string): Promise<IncidentUpdate[]> => {
+    const all = readStore<IncidentUpdate[]>(UPDATES_KEY, []);
+    return all
+      .filter(u => u.incident_id === id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  addUpdate: async (id: string, payload: { status: string; note: string; is_internal: boolean }): Promise<IncidentUpdate> => {
+    const allUpdates = readStore<IncidentUpdate[]>(UPDATES_KEY, []);
+    const newUpdate: IncidentUpdate = {
+      id: generateUpdateId(),
+      incident_id: id,
+      message: payload.note,
+      author: localStorage.getItem('user_name') || 'Operator',
+      status: payload.status,
+      created_at: new Date().toISOString(),
+    };
+    allUpdates.unshift(newUpdate);
+    writeStore(UPDATES_KEY, allUpdates);
+
+    // Also update the incident status
+    const allIncidents = readStore<Incident[]>(INCIDENTS_KEY, []);
+    const idx = allIncidents.findIndex(i => i.id === id);
+    if (idx !== -1) {
+      allIncidents[idx].status = payload.status;
+      allIncidents[idx].updated_at = new Date().toISOString();
+      writeStore(INCIDENTS_KEY, allIncidents);
+      eventBus.emit('incident_updated', allIncidents[idx]);
+    }
+
+    eventBus.emit('status_update', newUpdate);
+    return newUpdate;
+  },
 };
 
-// ─── Auth Endpoints ──────────────────────────────────────────
+// ─── Auth API (localStorage) ────────────────────────────────────
 export interface LoginResponse {
   token: string;
   user: {
@@ -117,12 +258,56 @@ export interface LoginResponse {
 }
 
 export const auth = {
-  login: (credentials: { email: string; password: string }) =>
-    request<LoginResponse>('/auth/login', { method: 'POST', body: credentials }),
-  signup: (data: { name: string; email: string; password: string; role: string }) =>
-    request<LoginResponse>('/auth/signup', { method: 'POST', body: data }),
-  me: () =>
-    request<{ id: string; name: string; role: string }>('/auth/me'),
+  login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
+    // Demo credential mappings
+    const demoAccounts: Record<string, { name: string; role: LoginResponse['user']['role'] }> = {
+      'staff@emergency.gov': { name: 'Dispatch Control', role: 'staff' },
+      'responder@emergency.gov': { name: 'Unit-04', role: 'responder' },
+      'admin@emergency.gov': { name: 'Admin', role: 'admin' },
+    };
+
+    const account = demoAccounts[credentials.email];
+    if (account) {
+      const response: LoginResponse = {
+        token: 'local-jwt-' + Date.now(),
+        user: { id: 'user-' + Math.random().toString(36).substring(2, 6), name: account.name, role: account.role },
+      };
+      return response;
+    }
+
+    // For any other credentials, allow login with detected role
+    const role = credentials.email.includes('responder') ? 'responder' as const : 'staff' as const;
+    return {
+      token: 'local-jwt-' + Date.now(),
+      user: { id: 'user-' + Math.random().toString(36).substring(2, 6), name: credentials.email.split('@')[0], role },
+    };
+  },
+
+  signup: async (data: { name: string; email: string; password: string; role: string }): Promise<LoginResponse> => {
+    const users = readStore<any[]>(USERS_KEY, []);
+    const newUser = {
+      id: 'user-' + Math.random().toString(36).substring(2, 6),
+      name: data.name,
+      email: data.email,
+      role: data.role as LoginResponse['user']['role'],
+    };
+    users.push(newUser);
+    writeStore(USERS_KEY, users);
+
+    return {
+      token: 'local-jwt-' + Date.now(),
+      user: { id: newUser.id, name: newUser.name, role: newUser.role },
+    };
+  },
+
+  me: async (): Promise<{ id: string; name: string; role: string }> => {
+    return {
+      id: 'local-user',
+      name: localStorage.getItem('user_name') || 'Operator',
+      role: localStorage.getItem('user_role') || 'staff',
+    };
+  },
+
   logout: () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_role');
@@ -130,7 +315,7 @@ export const auth = {
   },
 };
 
-// ─── Sync Endpoints (Offline-first) ─────────────────────────
+// ─── Sync API (no-op for offline mode) ──────────────────────────
 export interface SyncPayload {
   batch_id: string;
   entries: Array<{
@@ -142,13 +327,11 @@ export interface SyncPayload {
 }
 
 export const sync = {
-  pushBatch: (payload: SyncPayload) =>
-    request<{ accepted: number; conflicts: number }>('/sync/push', { method: 'POST', body: payload }),
-  pullSince: (since: string) =>
-    request<SyncPayload>(`/sync/pull?since=${encodeURIComponent(since)}`),
+  pushBatch: async (_payload: SyncPayload) => ({ accepted: 0, conflicts: 0 }),
+  pullSince: async (_since: string): Promise<SyncPayload> => ({ batch_id: '', entries: [] }),
 };
 
-// ─── AI Classification Endpoints ────────────────────────────
+// ─── AI Classification (delegates to client-side classifier) ────
 export interface AIClassification {
   danger_score: number;
   severity: 'critical' | 'high' | 'moderate' | 'low';
@@ -161,8 +344,20 @@ export interface AIClassification {
 }
 
 export const ai = {
-  classify: (description: string) =>
-    request<AIClassification>('/ai/classify', { method: 'POST', body: { description } }),
+  classify: async (description: string): Promise<AIClassification> => {
+    return classifyDanger(description);
+  },
 };
+
+class ApiError extends Error {
+  status: number;
+  data: unknown;
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+  }
+}
 
 export default { incidents, auth, sync, ai, ApiError };

@@ -143,8 +143,8 @@ export default function IncidentDetail({ incidentId, onClose }: IncidentDetailPr
                     {new Date(update.created_at).toLocaleTimeString()}
                   </span>
                 </div>
-                {update.note && (
-                  <p className="text-sm text-red-300/60 leading-relaxed italic border-l-2 border-red-500/20 pl-3">"{update.note}"</p>
+                {(update.note || update.message) && (
+                  <p className="text-sm text-red-300/60 leading-relaxed italic border-l-2 border-red-500/20 pl-3">"{update.note || update.message}"</p>
                 )}
               </div>
             </div>
