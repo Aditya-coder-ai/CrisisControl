@@ -22,7 +22,7 @@ WORKDIR /app
 
 COPY --from=builder /server .
 
-# Railway sets PORT env var
+# Use PORT env var
 EXPOSE ${PORT}
 
 CMD ["./server"]

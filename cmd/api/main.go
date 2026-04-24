@@ -29,7 +29,7 @@ func main() {
 	
 	server := api.NewServer(memoryStore, syncService, hub)
 	
-	// Use PORT env var (Railway sets this), fallback to 8085 for local dev
+	// Use PORT env var, fallback to 8085 for local dev
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8085"
