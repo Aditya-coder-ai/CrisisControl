@@ -70,6 +70,8 @@ function LeafletLocationPicker({ onSelect, selectedCoords }: {
     } else {
       markerRef.current = L.marker([selectedCoords.lat, selectedCoords.lng]).addTo(mapRef.current);
     }
+    // Pan to the new location when it updates
+    mapRef.current.flyTo([selectedCoords.lat, selectedCoords.lng], 15);
   }, [selectedCoords]);
 
   return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />;
@@ -87,6 +89,24 @@ export default function GuestReport() {
   const [aiResult, setAiResult] = useState<AIClassification | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const { lastMessage, isConnected } = useWebSocket(['incident_updated']);
+
+  // Fetch live user location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setSelectedCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn("Could not get location automatically:", error);
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+  }, []);
 
   // Debounced AI classification — runs client-side, no backend needed
   useEffect(() => {
