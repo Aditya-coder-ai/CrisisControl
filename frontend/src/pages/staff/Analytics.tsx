@@ -99,7 +99,7 @@ function MiniBarChart({ data }: { data: typeof weeklyTrend }) {
 // ─── Component ──────────────────────────────────────────────────
 export default function AnalyticsPage() {
   return (
-    <DashboardLayout role="staff">
+    <DashboardLayout>
       <div className="p-8 space-y-8">
         {/* Page Header */}
         <header>

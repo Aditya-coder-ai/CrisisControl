@@ -40,7 +40,7 @@ const DUMMY_TEAMS = [
 
 export default function TeamsPage() {
   return (
-    <DashboardLayout role="staff">
+    <DashboardLayout>
       <div className="p-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
