@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Shield,
@@ -173,16 +173,39 @@ function Home() {
   );
 }
 
+function ProtectedRoute({ children, allowedRole }: { children: React.ReactNode, allowedRole?: string }) {
+  const token = localStorage.getItem('auth_token');
+  const role = localStorage.getItem('user_role');
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRole && role !== allowedRole) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
-    <BrowserRouter basename="/CrisisControl">
+    <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/guest" element={<GuestReport />} />
-        <Route path="/staff" element={<StaffDashboard />} />
-        <Route path="/responder" element={<ResponderMap />} />
+        <Route path="/staff" element={
+          <ProtectedRoute allowedRole="staff">
+            <StaffDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/responder" element={
+          <ProtectedRoute>
+            <ResponderMap />
+          </ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
   );
