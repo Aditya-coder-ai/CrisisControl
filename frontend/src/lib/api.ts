@@ -259,27 +259,23 @@ export interface LoginResponse {
 
 export const auth = {
   login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
-    // Demo credential mappings
-    const demoAccounts: Record<string, { name: string; role: LoginResponse['user']['role'] }> = {
-      'staff@emergency.gov': { name: 'Dispatch Control', role: 'staff' },
-      'responder@emergency.gov': { name: 'Unit-04', role: 'responder' },
-      'admin@emergency.gov': { name: 'Admin', role: 'admin' },
+    // Strict credential mappings
+    const demoAccounts: Record<string, { name: string; password: string; role: LoginResponse['user']['role'] }> = {
+      'staff@emergency.gov': { name: 'Dispatch Control', password: 'staff123', role: 'staff' },
+      'responder@emergency.gov': { name: 'Unit-04', password: 'resp123', role: 'responder' },
+      'admin@emergency.gov': { name: 'Admin', password: 'admin123', role: 'admin' },
     };
 
     const account = demoAccounts[credentials.email];
-    if (account) {
-      const response: LoginResponse = {
-        token: 'local-jwt-' + Date.now(),
-        user: { id: 'user-' + Math.random().toString(36).substring(2, 6), name: account.name, role: account.role },
-      };
-      return response;
+    
+    // Strict password verification
+    if (!account || account.password !== credentials.password) {
+      throw new ApiError('Invalid email or password', 401, { error: 'Invalid email or password' });
     }
 
-    // For any other credentials, allow login with detected role
-    const role = credentials.email.includes('responder') ? 'responder' as const : 'staff' as const;
     return {
       token: 'local-jwt-' + Date.now(),
-      user: { id: 'user-' + Math.random().toString(36).substring(2, 6), name: credentials.email.split('@')[0], role },
+      user: { id: 'user-' + Math.random().toString(36).substring(2, 6), name: account.name, role: account.role },
     };
   },
 
