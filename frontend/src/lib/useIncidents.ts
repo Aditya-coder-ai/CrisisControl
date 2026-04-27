@@ -18,24 +18,26 @@ export function useIncidents() {
     }
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchIncidents();
   }, [fetchIncidents]);
 
-  // Process local event bus events (replaces WebSocket)
+  // Subscribe to Firestore real-time updates
+  useEffect(() => {
+    const unsubscribe = api.incidents.onRealtimeUpdates((data) => {
+      setIncidents(data);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Also handle local event bus events (for cross-tab BroadcastChannel sync)
   useEffect(() => {
     if (!lastMessage) return;
 
-    if (lastMessage.topic === 'incident_created') {
-      const newIncident = lastMessage.payload;
-      setIncidents((current) => {
-        const exists = current.find((i) => i.id === newIncident.id);
-        if (exists) {
-          return current.map((i) => (i.id === newIncident.id ? newIncident : i));
-        }
-        return [newIncident, ...current];
-      });
-    } else if (lastMessage.topic === 'incident_updated') {
+    if (lastMessage.topic === 'incident_created' || lastMessage.topic === 'incident_updated') {
+      // Firestore listener will handle the update, but we can do an optimistic update here
       const updatedIncident = lastMessage.payload;
       setIncidents((current) => {
         const exists = current.find((i) => i.id === updatedIncident.id);
