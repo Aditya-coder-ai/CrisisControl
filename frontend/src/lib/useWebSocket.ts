@@ -10,6 +10,21 @@ type EventHandler = (payload: any) => void;
 
 class LocalEventBus {
   private listeners: Map<string, Set<EventHandler>> = new Map();
+  private channel: BroadcastChannel | null = null;
+
+  constructor() {
+    // BroadcastChannel enables cross-tab real-time sync
+    try {
+      this.channel = new BroadcastChannel('crisis_control_sync');
+      this.channel.onmessage = (event) => {
+        const { topic, payload } = event.data;
+        // Deliver to local listeners (but don't re-broadcast)
+        this._notifyLocal(topic, payload);
+      };
+    } catch {
+      // BroadcastChannel not supported — single-tab mode
+    }
+  }
 
   on(topic: string, handler: EventHandler): void {
     if (!this.listeners.has(topic)) {
@@ -22,15 +37,25 @@ class LocalEventBus {
     this.listeners.get(topic)?.delete(handler);
   }
 
-  emit(topic: string, payload: any): void {
-    // Notify topic-specific listeners
+  /** Notify local listeners only (used for incoming cross-tab messages) */
+  private _notifyLocal(topic: string, payload: any): void {
     this.listeners.get(topic)?.forEach(handler => {
       try { handler(payload); } catch (err) { console.error('EventBus handler error:', err); }
     });
-    // Notify wildcard listeners
     this.listeners.get('*')?.forEach(handler => {
       try { handler({ topic, payload }); } catch (err) { console.error('EventBus handler error:', err); }
     });
+  }
+
+  emit(topic: string, payload: any): void {
+    // Notify listeners in this tab
+    this._notifyLocal(topic, payload);
+    // Broadcast to other tabs
+    try {
+      this.channel?.postMessage({ topic, payload });
+    } catch {
+      // Silently ignore if channel is closed
+    }
   }
 }
 
