@@ -94,9 +94,28 @@ export default function IncidentDetail({ incidentId, onClose }: IncidentDetailPr
         <p className="text-red-300/60 text-sm leading-relaxed mb-4">
           {incident.description}
         </p>
+
+        {/* Type badge */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-[10px] px-2.5 py-1 rounded-full font-bold font-mono tracking-wider bg-orange-500/10 border border-orange-500/20 text-orange-400 uppercase">
+            <Flame className="w-3 h-3 inline mr-1" />{incident.type}
+          </span>
+          <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold font-mono tracking-wider uppercase ${
+            incident.status === 'resolved' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
+            incident.status === 'dispatched' ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' :
+            incident.status === 'in_progress' ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400' :
+            'bg-red-500/10 border border-red-500/20 text-red-400'
+          }`}>
+            {incident.status}
+          </span>
+        </div>
+
         <div className="flex items-center gap-4 text-xs font-mono text-red-400/50 uppercase tracking-wider">
-          <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Sector 4</span>
-          <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(incident.created_at).toLocaleTimeString()}</span>
+          <span className="flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5" />
+            {incident.location?.address || `${incident.location?.latitude?.toFixed(4) || '—'}°N, ${incident.location?.longitude?.toFixed(4) || '—'}°E`}
+          </span>
+          <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {new Date(incident.created_at).toLocaleString()}</span>
         </div>
       </div>
 
@@ -119,6 +138,17 @@ export default function IncidentDetail({ incidentId, onClose }: IncidentDetailPr
             </p>
           </div>
         </div>
+
+        {/* Tags */}
+        {incident.tags && incident.tags.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {incident.tags.map((tag: string, i: number) => (
+              <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-red-950/30 border border-red-500/10 text-red-300/50 font-mono">
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Timeline */}
