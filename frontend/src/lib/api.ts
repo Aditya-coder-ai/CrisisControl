@@ -17,7 +17,7 @@ import {
   orderBy,
   where,
   onSnapshot,
-  Timestamp,
+  setDoc,
 } from 'firebase/firestore';
 import { eventBus } from './useWebSocket';
 import { classifyDanger } from './aiClassifier';
@@ -41,6 +41,68 @@ function writeStore<T>(key: string, data: T): void {
 // ─── Firestore Collections ──────────────────────────────────────
 const incidentsCol = collection(db, 'incidents');
 const updatesCol = collection(db, 'incident_updates');
+
+// ─── Seed Firestore with demo data if empty ─────────────────────
+let seeded = false;
+async function seedFirestoreIfEmpty() {
+  if (seeded) return;
+  seeded = true;
+  
+  try {
+    const snapshot = await getDocs(incidentsCol);
+    if (snapshot.size > 0) return; // Already has data
+
+    const now = new Date();
+    const demoIncidents = [
+      {
+        type: 'Fire',
+        title: 'Warehouse Fire — Sector 3',
+        description: 'Large warehouse fire reported with heavy smoke. Multiple floors involved. Adjacent buildings at risk.',
+        severity: 'critical',
+        status: 'dispatched',
+        location: { latitude: 19.076, longitude: 72.8777, address: '19.0760°N, 72.8777°E' },
+        assigned_team: 'Fire Unit Alpha',
+        external_agency: 'Fire Dept',
+        tags: ['fire', 'warehouse', 'multi-floor'],
+        created_at: new Date(now.getTime() - 45 * 60000).toISOString(),
+        updated_at: now.toISOString(),
+      },
+      {
+        type: 'Medical',
+        title: 'Multi-Vehicle Collision',
+        description: 'Major accident on highway involving 4 vehicles. At least 3 people injured, one unconscious.',
+        severity: 'high',
+        status: 'in_progress',
+        location: { latitude: 28.6139, longitude: 77.209, address: '28.6139°N, 77.2090°E' },
+        assigned_team: 'Medic-7',
+        external_agency: 'Ambulance',
+        tags: ['accident', 'highway', 'multiple-casualties'],
+        created_at: new Date(now.getTime() - 20 * 60000).toISOString(),
+        updated_at: now.toISOString(),
+      },
+      {
+        type: 'Security',
+        title: 'Suspicious Package — Mall',
+        description: 'Unattended package found near main entrance of shopping mall. Area being evacuated.',
+        severity: 'moderate',
+        status: 'reported',
+        location: { latitude: 12.9716, longitude: 77.5946, address: '12.9716°N, 77.5946°E' },
+        assigned_team: 'Pending',
+        external_agency: 'Police',
+        tags: ['suspicious', 'evacuation'],
+        created_at: new Date(now.getTime() - 10 * 60000).toISOString(),
+        updated_at: now.toISOString(),
+      },
+    ];
+
+    for (const inc of demoIncidents) {
+      await addDoc(incidentsCol, inc);
+    }
+    console.log('✅ Firestore seeded with demo incidents');
+  } catch (err) {
+    console.error('Seed failed:', err);
+  }
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 export interface Incident {
@@ -76,6 +138,7 @@ export interface IncidentUpdate {
 // ─── Incident API (Firestore) ───────────────────────────────────
 export const incidents = {
   list: async (_params?: { status?: string; severity?: string }): Promise<Incident[]> => {
+    await seedFirestoreIfEmpty();
     const q = query(incidentsCol, orderBy('created_at', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Incident));
