@@ -18,6 +18,7 @@ import LoginPage from './pages/auth/Login';
 import SignupPage from './pages/auth/Signup';
 import TeamsPage from './pages/staff/Teams';
 import AnalyticsPage from './pages/staff/Analytics';
+import DashboardLayout from './components/layout/DashboardLayout';
 
 const tierCards = [
   {
@@ -200,19 +201,13 @@ function App() {
         <Route path="/guest" element={<GuestReport />} />
         <Route path="/staff" element={
           <ProtectedRoute allowedRole="staff">
-            <StaffDashboard />
+            <DashboardLayout />
           </ProtectedRoute>
-        } />
-        <Route path="/staff/teams" element={
-          <ProtectedRoute allowedRole="staff">
-            <TeamsPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/staff/analytics" element={
-          <ProtectedRoute allowedRole="staff">
-            <AnalyticsPage />
-          </ProtectedRoute>
-        } />
+        }>
+          <Route index element={<StaffDashboard />} />
+          <Route path="teams" element={<TeamsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+        </Route>
         <Route path="/responder" element={
           <ProtectedRoute>
             <ResponderMap />

@@ -13,7 +13,6 @@ import {
   Flame,
   Siren,
 } from 'lucide-react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Badge } from '@/components/ui/Badge';
 import { useIncidents } from '@/lib/useIncidents';
 import IncidentDetail from '@/components/IncidentDetail';
@@ -30,7 +29,7 @@ export default function StaffDashboard() {
   ];
 
   return (
-    <DashboardLayout>
+    <>
       <div className="p-6 lg:p-8 space-y-6 relative min-h-full">
         {/* Connection status */}
         <div className="absolute top-0 right-8 flex items-center gap-2">
@@ -186,6 +185,6 @@ export default function StaffDashboard() {
           />
         )}
       </AnimatePresence>
-    </DashboardLayout>
+    </>
   );
 }

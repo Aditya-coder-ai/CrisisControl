@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import {
   Activity,
   TrendingUp,
@@ -99,8 +98,7 @@ function MiniBarChart({ data }: { data: typeof weeklyTrend }) {
 // ─── Component ──────────────────────────────────────────────────
 export default function AnalyticsPage() {
   return (
-    <DashboardLayout>
-      <div className="p-8 space-y-8">
+    <div className="p-8 space-y-8">
         {/* Page Header */}
         <header>
           <h1 className="text-3xl font-black text-white uppercase tracking-tight flex items-center gap-3">
@@ -297,7 +295,6 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </motion.div>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 }

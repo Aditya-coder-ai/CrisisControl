@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
 interface DashboardLayoutProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 const navItems = [
@@ -146,7 +146,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* Content */}
         <main className="flex-1 overflow-auto scrollbar-thin">
-          {children}
+          {children || <Outlet />}
         </main>
       </div>
     </div>

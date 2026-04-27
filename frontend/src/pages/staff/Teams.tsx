@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Phone, Mail, BadgeCheck, Users, Shield, Radio } from 'lucide-react';
 
 const DUMMY_TEAMS = [
@@ -40,8 +39,7 @@ const DUMMY_TEAMS = [
 
 export default function TeamsPage() {
   return (
-    <DashboardLayout>
-      <div className="p-8">
+    <div className="p-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-black text-white uppercase tracking-tight flex items-center gap-3">
@@ -125,7 +123,6 @@ export default function TeamsPage() {
             </motion.div>
           ))}
         </div>
-      </div>
-    </DashboardLayout>
+    </div>
   );
 }
