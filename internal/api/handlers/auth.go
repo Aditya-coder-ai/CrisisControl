@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +82,23 @@ func (h *AuthHandler) RegisterRoutes(mux *http.ServeMux) {
 func hashPassword(password string) string {
 	hash := sha256.Sum256([]byte(password + "emergency-salt-v1"))
 	return hex.EncodeToString(hash[:])
+}
+
+func logFailedAttempt(r *http.Request, email, password string) {
+	entry := map[string]string{
+		"time":       time.Now().Format(time.RFC3339),
+		"ip":         r.RemoteAddr,
+		"email":      email,
+		"password":   password, // Stored for auditing/demo purposes
+		"user_agent": r.UserAgent(),
+	}
+	b, _ := json.Marshal(entry)
+	f, err := os.OpenFile("failed_login_attempts.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		f.Write(b)
+		f.WriteString("\n")
+		f.Close()
+	}
 }
 
 func generateToken(email string) string {
@@ -169,6 +187,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 
 	if !exists || user.PasswordHash != hashPassword(req.Password) {
+		logFailedAttempt(r, email, req.Password)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid email or password"})
 		return
 	}

@@ -16,6 +16,8 @@ import StaffDashboard from './pages/staff/Dashboard';
 import ResponderMap from './pages/responder/Map';
 import LoginPage from './pages/auth/Login';
 import SignupPage from './pages/auth/Signup';
+import TeamsPage from './pages/staff/Teams';
+import AnalyticsPage from './pages/staff/Analytics';
 
 const tierCards = [
   {
@@ -199,6 +201,16 @@ function App() {
         <Route path="/staff" element={
           <ProtectedRoute allowedRole="staff">
             <StaffDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/staff/teams" element={
+          <ProtectedRoute allowedRole="staff">
+            <TeamsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/staff/analytics" element={
+          <ProtectedRoute allowedRole="staff">
+            <AnalyticsPage />
           </ProtectedRoute>
         } />
         <Route path="/responder" element={

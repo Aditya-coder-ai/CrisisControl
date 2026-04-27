@@ -48,7 +48,7 @@ The frontend will start a local development server at `http://localhost:5173`.
 ```bash
 # From the root directory
 go mod tidy
-go run ./cmd/server
+go run ./cmd/api
 ```
 The Go backend will handle API endpoints and WebSocket connections.
 
